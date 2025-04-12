@@ -592,6 +592,18 @@ wheels = [
 ]
 
 [[package]]
+name = "hub-sdk"
+version = "0.0.20"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2d/2f/b6b5728938f4fda03031f6b2d8d1a20deeaafed2672179359e9ff1e167d9/hub_sdk-0.0.20.tar.gz", hash = "sha256:0fe48a6baf280fe8bf6aa872b6d51395a32557c066dfbc5af4e81dc6d0289f2f", size = 39516 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/fb/c326860844beb4ef2bc02e40322be02e2fdb228f31366773039af82f5365/hub_sdk-0.0.20-py3-none-any.whl", hash = "sha256:28f03470306fd4b08fc322f065840e5f37a9c72867e971d24b12c535e8704a8d", size = 44327 },
+]
+
+[[package]]
 name = "icrawler"
 version = "0.6.10"
 source = { registry = "https://pypi.org/simple" }
@@ -698,6 +710,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6b/75/8fb9c3fb3874c6bd11c13522b6a4d50fe78d2be8788078adc5614d162134/kaggle-1.7.4.2.tar.gz", hash = "sha256:0b144358f4187bde83e8a0335549bf736fb466697272a135a985eb6d2c6f9cb6", size = 325337 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/75/f6/cccedb8db42beac1c5d7cfa57d5b800b90ef91118833972af3f7b5e159c8/kaggle-1.7.4.2-py3-none-any.whl", hash = "sha256:f25fec160651e05599b78d9ad3e00958d533172cfad02fcb2d202ac87e65e18e", size = 173179 },
+]
+
+[[package]]
+name = "kagglehub"
+version = "0.3.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7a/14/496ad092984d40941c0f5abb4ce3df73456025eb5a4959c5e5d1882d67fe/kagglehub-0.3.11.tar.gz", hash = "sha256:8dd33e6bbd827590cc1e99d1bf5343135b22002fd01ea98d6494a8aa73fc0897", size = 107255 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/4b/b5023905576b960483207ab6506694101c594c18577e5a36a7189823015e/kagglehub-0.3.11-py3-none-any.whl", hash = "sha256:875f5bcfbda64f7e5ace96f4b2c8af5f9952ecbf8820e156300e8563ac177fc4", size = 63420 },
 ]
 
 [[package]]
@@ -1471,8 +1498,10 @@ dependencies = [
     { name = "clearml" },
     { name = "dagshub" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "hub-sdk" },
     { name = "icrawler" },
     { name = "kaggle" },
+    { name = "kagglehub" },
     { name = "motor" },
     { name = "numpy" },
     { name = "opencv-python-headless" },
@@ -1498,8 +1527,10 @@ requires-dist = [
     { name = "clearml", specifier = ">=1.18.0" },
     { name = "dagshub", specifier = ">=0.5.9" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
+    { name = "hub-sdk", specifier = ">=0.0.20" },
     { name = "icrawler", specifier = ">=0.6.10" },
     { name = "kaggle", specifier = ">=1.7.4.2" },
+    { name = "kagglehub", specifier = ">=0.3.11" },
     { name = "motor", specifier = ">=3.7.0" },
     { name = "numpy", specifier = ">=2.2.4" },
     { name = "opencv-python-headless", specifier = ">=4.11.0.86" },
