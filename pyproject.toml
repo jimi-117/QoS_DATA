@@ -19,14 +19,17 @@ dependencies = [
     "numpy>=2.2.4",
     "opencv-python-headless>=4.11.0.86",
     "pandas>=2.2.3",
+    "pathlib>=1.0.1",
     "pillow>=11.2.1",
     "pydantic-settings>=2.8.1",
+    "pyyaml>=6.0.2",
     "trio>=0.29.0",
 ]
 # motor and asyncpg are for FastAPI. celery is for MLOps pipline, may try BackgroundTasks in FastAPI at first.
 
 [dependency-groups]
 dev = [
+    "logging>=0.4.9.6",
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "ruff>=0.11.5",
