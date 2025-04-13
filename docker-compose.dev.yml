@@ -1,0 +1,72 @@
+services:
+
+##################################### for intial ETL ######################################
+  etl_runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qos_data_etl_runner
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./data/processed:/app/data/processed
+
+    environment:
+    # Initial data soureces
+      # kaggle
+      - KAGGLE_API_KEY=${KAGGLE_API_KEY}
+      - KAGGLE_USERNAME=${KAGGLE_USERNAME}
+
+      # MongoDB
+      - SOURCE_MONGO_HOST= abc #TODO
+      - SOURCE_MONGO_PORT=27017
+      - SOURCE_MONGO_USER=${SOURCE_MONGO_USER}
+      - SOURCE_MONGO_PASSWORD=${SOURCE_MONGO_PASSWORD}
+      - SOURCE_MONGO_DB=${SOURCE_MONGO_DB}
+
+      # PostgreSQL
+      - SOURCE_POSTGRES_HOST=abc #TODO
+      - SOURCE_POSTGRES_PORT=5432
+      - SOURCE_POSTGRES_USER=${SOURCE_POSTGRES_USER}
+      - SOURCE_POSTGRES_PASSWORD=${SOURCE_POSTGRES_PASSWORD}
+      - SOURCE_POSTGRES_DB=${SOURCE_POSTGRES_DB}
+
+    # ClearML
+      - CLEARML_API_HOST=${CLEARML_API_HOST}
+      - CLEARML_API_ACCESS_KEY=${CLEARML_API_ACCESS_KEY}
+      - CLEARML_API_SECRET_KEY=${CLEARML_API_SECRET_KEY}
+
+    # to keep the container running
+    command: ['tail', '-f', '/dev/null']
+    networks:
+      - qos_data_dev_network
+
+####################################### for preparing data ######################################
+  source_postgres:
+    image: postgres:latest
+    container_name: qos-data-source-pg
+    environment:
+      - POSTGRES_USER=${SOURCE_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${SOURCE_POSTGRES_PASSWORD}
+      - POSTGRES_DB=${SOURCE_POSTGRES_DB}
+    volumes:
+      - ./setup_data/postgres_init:/docker-entrypoint-initdb.d
+    networks:
+      - qos_data_dev_network
+
+  source_mongodb:
+    image: mongo:latest
+    container_name: qos-data-source-mongo
+    environment:
+      # - MONGO_INITDB_ROOT_USERNAME=${SOURCE_MONGO_USER}
+      # - MONGO_INITDB_ROOT_PASSWORD=${SOURCE_MONGO_PASSWORD}
+      - MONGO_INITDB_DATABASE=${SOURCE_MONGO_DB}
+    volumes:
+      - ./setup_data/mongo_init:/docker-entrypoint-initdb.d
+    networks:
+      - qos_data_dev_network
+
+networks:
+  qos_data_dev_network:
+    driver: bridge
+  

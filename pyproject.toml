@@ -1,0 +1,40 @@
+[project]
+name = "qos-data"
+version = "0.1.0"
+description = "It is Data sub module for QoS project."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "anyio>=4.9.0",
+    "asyncpg>=0.30.0",
+    "celery[redis]>=5.5.1",
+    "clearml>=1.18.0",
+    "dagshub>=0.5.9",
+    "fastapi[standard]>=0.115.12",
+    "hub-sdk>=0.0.20",
+    "icrawler>=0.6.10",
+    "kaggle>=1.7.4.2",
+    "kagglehub>=0.3.11",
+    "motor>=3.7.0",
+    "numpy>=2.2.4",
+    "opencv-python-headless>=4.11.0.86",
+    "pandas>=2.2.3",
+    "pillow>=11.2.1",
+    "pydantic-settings>=2.8.1",
+    "trio>=0.29.0",
+]
+# motor and asyncpg are for FastAPI. celery is for MLOps pipline, may try BackgroundTasks in FastAPI at first.
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15.0",
+    "pytest>=8.3.5",
+    "ruff>=0.11.5",
+    "uvicorn[standard]>=0.34.0",
+]
+
+# this allows to pytest to find the source code
+[tool.pytest.ini_options]
+pythonpath = [
+    "app",
+]
