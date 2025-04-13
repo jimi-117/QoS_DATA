@@ -6,6 +6,9 @@ from typing import List, Dict
 import time
 import shutil
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_ROOT / "data" / "raw" / "scraped_images"
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -16,8 +19,8 @@ logger = logging.getLogger(__name__)
 class FoodImageCollector:
     def __init__(
         self,
-        output_dir: str = "../data/raw/scraped_images",
-        items_per_category: int = 20
+        output_dir: str = str(DATA_DIR),
+        items_per_category: int = 25
     ):
         """
         Initialize the food image collector
@@ -156,6 +159,8 @@ class FoodImageCollector:
         return collection_results
 
 def main():
+    logger.info(f"Project root: {PROJECT_ROOT}")
+    logger.info(f"Data directory: {DATA_DIR}")
     collector = FoodImageCollector()
     results = collector.run()
     
