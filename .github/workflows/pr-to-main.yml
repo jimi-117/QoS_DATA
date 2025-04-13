@@ -8,23 +8,21 @@ on:
 jobs:
   create-pull-request:
     runs-on: ubuntu-latest
-    # 同一ブランチからのPRが既に存在する場合は実行しない (オプション)
     if: github.event.repository.default_branch != github.ref_name && !contains(github.event.head_commit.message, '[skip ci]')
 
     steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          ref: develop # develop ブランチをチェックアウト
+          ref: develop
 
       - name: Check for existing PR
         id: check_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_HEAD_BRANCH: ${{ github.ref_name }} # develop
-          PR_BASE_BRANCH: main # or your default branch name
+          PR_HEAD_BRANCH: ${{ github.ref_name }} 
+          PR_BASE_BRANCH: main 
         run: |
-          # develop -> main のオープンなPRが存在するか確認
           EXISTING_PR=$(gh pr list --head "$PR_HEAD_BRANCH" --base "$PR_BASE_BRANCH" --state open --limit 1 --json number --jq '.[0].number')
           if [ -z "$EXISTING_PR" ]; then
             echo "pr_exists=false" >> $GITHUB_OUTPUT
@@ -37,14 +35,13 @@ jobs:
         if: steps.check_pr.outputs.pr_exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_HEAD_BRANCH: ${{ github.ref_name }} # develop
-          PR_BASE_BRANCH: main # or your default branch name
+          PR_HEAD_BRANCH: ${{ github.ref_name }} 
+          PR_BASE_BRANCH: main 
         run: |
           gh pr create \
             --title "Merge ${PR_HEAD_BRANCH} into ${PR_BASE_BRANCH}" \
             --body "Automated PR created by GitHub Actions after push to ${PR_HEAD_BRANCH}." \
             --base "${PR_BASE_BRANCH}" \
             --head "${PR_HEAD_BRANCH}" \
-            --label "automated-pr" # 必要に応じてラベルを追加
-        # 失敗してもワークフロー全体は止めない (例: すでにマージ済みの場合など)
-        # continue-on-error: true
+            --label "automated-pr" 
+       
