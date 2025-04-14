@@ -1,78 +1,108 @@
+# qos_data/scripts/load_sources_to_db.py
 import os
 import asyncio
+import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncpg
-import yaml  # for reading data.yaml
+import yaml
 from pathlib import Path
 from PIL import Image
-import json  # for PostgreSQL JSONB type
+import json
 
-# Database connection settings
-MONGO_HOST = os.getenv("SOURCE_MONGO_HOST", "localhost")
-# ... (other DB connection settings) ...
-POSTGRES_DB = os.getenv("SOURCE_POSTGRES_DB", "source_annotations")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-SOURCE_YOLO_DIR = Path("/app/setup_data/source_yolo_dataset")  # path inside container
+# --- Database Connection Settings ---
+MONGO_HOST = os.getenv("SOURCE_MONGO_HOST", "source_mongodb_dev") # Use service name
+MONGO_PORT = int(os.getenv("SOURCE_MONGO_PORT", 27017))
+MONGO_DB_NAME = os.getenv("SOURCE_MONGO_DB", "source_images")
+# Add MONGO_USER/PASS if using authentication
 
-async def load_yolo_to_dbs():
-    # --- MongoDB connection and cleanup ---
-    mongo_uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}"
-    mongo_client = AsyncIOMotorClient(mongo_uri)
-    mongo_db = mongo_client[MONGO_DB]
+POSTGRES_HOST = os.getenv("SOURCE_POSTGRES_HOST", "source_postgres_dev") # Use service name
+POSTGRES_PORT = int(os.getenv("SOURCE_POSTGRES_PORT", 5432))
+POSTGRES_USER = os.getenv("SOURCE_POSTGRES_USER", "etl_user")
+POSTGRES_PASS = os.getenv("SOURCE_POSTGRES_PASSWORD", "etl_password")
+POSTGRES_DB_NAME = os.getenv("SOURCE_POSTGRES_DB", "source_annotations")
+
+# --- Source Data Path ---
+# Assumes the source YOLO dataset is named 'Fruits-detection' as per image
+# Adjust this path if your dataset directory name is different
+SOURCE_YOLO_DIR = Path("/app/setup_data/source_dataset/Fruits-detection")
+
+async def clear_dbs(mongo_db, pg_conn):
+    """Clear existing data from temporary databases."""
+    logging.info("Clearing temporary databases...")
     image_collection = mongo_db["images"]
     await image_collection.delete_many({})
-    print("Cleared MongoDB 'images' collection.")
+    logging.info("Cleared MongoDB 'images' collection.")
+    if pg_conn:
+        await pg_conn.execute("DELETE FROM image_annotations;")
+        # Optional: Clear metadata table if it exists
+        # await pg_conn.execute("DELETE FROM dataset_metadata;")
+        logging.info("Cleared PostgreSQL 'image_annotations' table.")
 
-    # --- PostgreSQL connection and cleanup ---
+async def load_yolo_to_dbs():
+    """Loads the source YOLO dataset into temporary MongoDB and PostgreSQL."""
+    mongo_client = None
     pg_conn = None
     try:
+        # --- Connect to Databases ---
+        logging.info(f"Connecting to MongoDB at {MONGO_HOST}:{MONGO_PORT}...")
+        mongo_uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}" # Add auth if needed
+        mongo_client = AsyncIOMotorClient(mongo_uri)
+        mongo_db = mongo_client[MONGO_DB_NAME]
+        logging.info("MongoDB connected.")
+
+        logging.info(f"Connecting to PostgreSQL at {POSTGRES_HOST}:{POSTGRES_PORT}...")
         pg_conn = await asyncpg.connect(
             user=POSTGRES_USER, password=POSTGRES_PASS,
-            database=POSTGRES_DB, host=POSTGRES_HOST, port=POSTGRES_PORT
+            database=POSTGRES_DB_NAME, host=POSTGRES_HOST, port=POSTGRES_PORT
         )
-        await pg_conn.execute("DELETE FROM image_annotations;")
-        # Clear table containing data.yaml contents (if exists)
-        # await pg_conn.execute("DELETE FROM dataset_metadata;")
-        print("Cleared PostgreSQL 'image_annotations' table.")
+        logging.info("PostgreSQL connected.")
 
-        # --- Load data.yaml ---
+        # --- Clear existing data ---
+        await clear_dbs(mongo_db, pg_conn)
+
+        # --- Load class names from data.yaml ---
         data_yaml_path = SOURCE_YOLO_DIR / "data.yaml"
         class_names = []
         if data_yaml_path.exists():
             with open(data_yaml_path, 'r') as f:
                 data_yaml_content = yaml.safe_load(f)
                 class_names = data_yaml_content.get('names', [])
-                print(f"Loaded class names from data.yaml: {class_names}")
-                # Optionally save other metadata to PostgreSQL
-                # nc = data_yaml_content.get('nc')
-                # await pg_conn.execute("INSERT INTO dataset_metadata (key, value) VALUES ($1, $2)", 'class_names', json.dumps(class_names))
+                logging.info(f"Loaded {len(class_names)} class names from data.yaml: {class_names}")
+                # Optional: Store class names in PG metadata table
+                # await pg_conn.execute("INSERT INTO dataset_metadata (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                #                       'class_names', json.dumps(class_names))
         else:
-            print("Warning: data.yaml not found.")
+            logging.warning(f"data.yaml not found at {data_yaml_path}")
 
-        # --- Scan images and labels for DB insertion ---
+        # --- Scan dataset and prepare data for insertion ---
         images_to_insert_mongo = []
         annotations_to_insert_pg = []
+        processed_count = 0
 
-        for split in ["train", "valid"]:  # add "test" if available
+        for split in ["train", "valid"]: # Adjust splits as needed
             image_dir = SOURCE_YOLO_DIR / split / "images"
             label_dir = SOURCE_YOLO_DIR / split / "labels"
 
             if not image_dir.is_dir():
-                print(f"Warning: Image directory not found: {image_dir}")
+                logging.warning(f"Directory not found: {image_dir}")
                 continue
 
-            print(f"Processing {split} set...")
-            for image_path in image_dir.glob('*.*'):  # scan image files
+            logging.info(f"Scanning {split} set in {image_dir}...")
+            for image_path in image_dir.iterdir():
                 if not image_path.is_file(): continue
 
-                label_path = label_dir / (image_path.stem + ".txt")  # corresponding label file
+                image_id_stem = image_path.stem # Use filename without extension as ID
+                label_path = label_dir / (image_id_stem + ".txt")
 
-                # Prepare image metadata for MongoDB
+                # Prepare MongoDB document
                 try:
                     with Image.open(image_path) as img:
                         width, height = img.size
                     mongo_doc = {
-                        "_id": f"{split}_{image_path.stem}",  # unique ID including split name
+                        "_id": image_id_stem, # Use stem as MongoDB ID
+                        "image_id": image_id_stem, # Also store as a field if preferred
                         "filename": image_path.name,
                         "split": split,
                         "metadata": {"width": width, "height": height},
@@ -80,18 +110,17 @@ async def load_yolo_to_dbs():
                     }
                     images_to_insert_mongo.append(mongo_doc)
                 except Exception as e:
-                    print(f"Error reading image {image_path}: {e}")
-                    continue  # skip if image cannot be read
+                    logging.error(f"Failed to process image {image_path}: {e}")
+                    continue # Skip this image if metadata extraction fails
 
-                # Prepare label data for PostgreSQL
+                # Prepare PostgreSQL record
+                annotations = []
                 if label_path.exists() and label_path.is_file():
-                    annotations = []
                     try:
                         with open(label_path, 'r') as f:
                             for line in f:
                                 parts = line.strip().split()
                                 if len(parts) == 5:
-                                    # YOLO format: class_id cx cy w h
                                     annotations.append({
                                         "class_id": int(parts[0]),
                                         "x_center": float(parts[1]),
@@ -99,42 +128,66 @@ async def load_yolo_to_dbs():
                                         "width": float(parts[3]),
                                         "height": float(parts[4])
                                     })
-                        # Store in JSONB format
-                        pg_record = (image_path.name, json.dumps(annotations))
+                        # Use actual filename as the key for PG table
+                        pg_record = (image_path.name, json.dumps(annotations), split)
                         annotations_to_insert_pg.append(pg_record)
                     except Exception as e:
-                        print(f"Error reading/parsing label {label_path}: {e}")
-                # Images without labels will still be added to MongoDB (treated as unannotated images)
+                        logging.error(f"Failed to process label {label_path}: {e}")
+                # else: Allow images without labels, don't add to PG list
 
-        # --- Bulk insertion into DBs ---
+                processed_count += 1
+                if processed_count % 100 == 0:
+                    logging.info(f"Scanned {processed_count} images...")
+
+        # --- Bulk insert into databases ---
         if images_to_insert_mongo:
-            print(f"Inserting {len(images_to_insert_mongo)} documents into MongoDB...")
-            await image_collection.insert_many(images_to_insert_mongo)
-            print("MongoDB insertion complete.")
+            logging.info(f"Inserting {len(images_to_insert_mongo)} documents into MongoDB...")
+            try:
+                await mongo_db["images"].insert_many(images_to_insert_mongo, ordered=False) # Allow continuing on duplicates if _id is reused
+                logging.info("MongoDB insertion complete.")
+            except Exception as e: # Catch potential bulk write errors
+                 logging.error(f"MongoDB bulk insert failed: {e}")
         else:
-            print("No images found to insert into MongoDB.")
+            logging.info("No image metadata to insert into MongoDB.")
 
-        if annotations_to_insert_pg:
-            print(f"Inserting {len(annotations_to_insert_pg)} records into PostgreSQL...")
-            await pg_conn.executemany(
-                "INSERT INTO image_annotations (image_filename, annotations, source) VALUES ($1, $2, 'yolo_import_postgres') ON CONFLICT (image_filename) DO UPDATE SET annotations = EXCLUDED.annotations, source = EXCLUDED.source",
-                annotations_to_insert_pg
-            )
-            print("PostgreSQL insertion complete.")
+        if annotations_to_insert_pg and pg_conn:
+            logging.info(f"Inserting {len(annotations_to_insert_pg)} records into PostgreSQL...")
+            try:
+                # Use ON CONFLICT clause to handle potential reruns or duplicate filenames
+                await pg_conn.executemany(
+                    """
+                    INSERT INTO image_annotations (image_filename, annotations, split, source)
+                    VALUES ($1, $2, $3, 'yolo_import_postgres')
+                    ON CONFLICT (image_filename) DO UPDATE SET
+                      annotations = EXCLUDED.annotations,
+                      split = EXCLUDED.split,
+                      source = EXCLUDED.source;
+                    """,
+                    annotations_to_insert_pg
+                )
+                logging.info("PostgreSQL insertion complete.")
+            except Exception as e:
+                logging.error(f"PostgreSQL bulk insert failed: {e}")
         else:
-            print("No annotations found to insert into PostgreSQL.")
+            logging.info("No annotations to insert into PostgreSQL.")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.exception(f"An error occurred during the loading process: {e}") # Log full traceback
     finally:
-        if pg_conn: await pg_conn.close()
-        mongo_client.close()
+        # --- Close connections ---
+        if pg_conn:
+            await pg_conn.close()
+            logging.info("PostgreSQL connection closed.")
+        if mongo_client:
+            mongo_client.close()
+            logging.info("MongoDB connection closed.")
 
 async def main():
-    print("Starting YOLO dataset loading into temporary DBs...")
+    logging.info("Starting: Load source YOLO dataset into temporary DBs")
     await load_yolo_to_dbs()
-    print("Finished loading YOLO dataset into temporary DBs.")
+    logging.info("Finished: Load source YOLO dataset into temporary DBs")
 
 if __name__ == "__main__":
-    # PyYAML required
+    # Ensure necessary packages are available
+    # Consider adding checks or explicitly listing in Dockerfile build stage
     asyncio.run(main())

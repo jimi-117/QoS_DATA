@@ -176,3 +176,7 @@ cython_debug/
 .env.dev
 
 data/
+
+setup_data/source_dataset
+
+kaggle.json
