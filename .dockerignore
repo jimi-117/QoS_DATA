@@ -1,0 +1,67 @@
+# qos_data/.dockerignore
+
+# Git directory
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# DVC cache and state (cache should almost always be ignored)
+.dvc/cache/
+.dvc/tmp/
+.dvc/state
+
+# IDE / Editor specific files
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Test / Coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Secrets (should also be in .gitignore)
+.env
+.env.*
+kaggle.json # If placed here
+
+# Node Modules (if any JS tools are used incidentally)
+node_modules/
+
+# Add any other files/dirs you definitely don't need in the image build context
+
+data/

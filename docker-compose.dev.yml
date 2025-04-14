@@ -1,72 +1,105 @@
-services:
+# qos_data/docker-compose.dev.yml
+# This compose file is ONLY for running the one-time initial ETL process.
+version: '3.8'
 
-##################################### for intial ETL ######################################
+services:
   etl_runner:
+    # Build the image using the Dockerfile in the current directory
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: qos_data_etl_runner
+      dockerfile: Dockerfile.dev
+    container_name: qos-data-etl-runner-dev
     working_dir: /app
     volumes:
+      # Mount the entire project directory for access to all files
       - .:/app
-      - ./data/processed:/app/data/processed
-
+      - ./data:/app/data
+      # Note: Derived directories like data/processed and data/final_yolo_dataset
+      # will be created inside this mount by the scripts.
+    # env_file:
+    #   # Load environment variables from .env.dev
+    #   - .env.dev
     environment:
-    # Initial data soureces
-      # kaggle
-      - KAGGLE_API_KEY=${KAGGLE_API_KEY}
-      - KAGGLE_USERNAME=${KAGGLE_USERNAME}
-
-      # MongoDB
-      - SOURCE_MONGO_HOST= abc #TODO
-      - SOURCE_MONGO_PORT=27017
-      - SOURCE_MONGO_USER=${SOURCE_MONGO_USER}
-      - SOURCE_MONGO_PASSWORD=${SOURCE_MONGO_PASSWORD}
-      - SOURCE_MONGO_DB=${SOURCE_MONGO_DB}
-
-      # PostgreSQL
-      - SOURCE_POSTGRES_HOST=abc #TODO
+      # Define DB hostnames using service names
+      - SOURCE_POSTGRES_HOST=source_postgres_dev
       - SOURCE_POSTGRES_PORT=5432
-      - SOURCE_POSTGRES_USER=${SOURCE_POSTGRES_USER}
-      - SOURCE_POSTGRES_PASSWORD=${SOURCE_POSTGRES_PASSWORD}
-      - SOURCE_POSTGRES_DB=${SOURCE_POSTGRES_DB}
-
-    # ClearML
-      - CLEARML_API_HOST=${CLEARML_API_HOST}
-      - CLEARML_API_ACCESS_KEY=${CLEARML_API_ACCESS_KEY}
-      - CLEARML_API_SECRET_KEY=${CLEARML_API_SECRET_KEY}
-
-    # to keep the container running
-    command: ['tail', '-f', '/dev/null']
+      - SOURCE_MONGO_HOST=source_mongodb_dev
+      - SOURCE_MONGO_PORT=27017
+      # Ensure scripts can import modules correctly
+      - PYTHONPATH=/app
+    # Command to run the ETL sequence
+    command: >
+      bash -c "
+        echo '--- Initial ETL Start ---' &&
+        echo '[Step 1/2] Loading source YOLO dataset into temporary DBs...' &&
+        python scripts/load_sources_to_db.py &&
+        echo '[Step 2/2] Running main ETL to generate final dataset...' &&
+        python scripts/main_etl.py &&
+        echo '--- Initial ETL Finished Successfully ---'
+      "
     networks:
       - qos_data_dev_network
+    # Wait for DBs to be ready before starting the command
+    depends_on:
+      source_postgres_dev:
+        condition: service_healthy
+      source_mongodb_dev:
+        condition: service_healthy
 
-####################################### for preparing data ######################################
-  source_postgres:
-    image: postgres:latest
-    container_name: qos-data-source-pg
+  source_postgres_dev: # Temporary PostgreSQL for initial ETL
+    image: postgres:15-alpine
+    container_name: qos-data-source-pg-dev
+    # Load credentials from .env.dev via compose env_file or environment block
+    # env_file:
+    #   - .env.dev
     environment:
-      - POSTGRES_USER=${SOURCE_POSTGRES_USER}
-      - POSTGRES_PASSWORD=${SOURCE_POSTGRES_PASSWORD}
-      - POSTGRES_DB=${SOURCE_POSTGRES_DB}
+      - POSTGRES_USER=etl_user
+      - POSTGRES_PASSWORD=etl_password
+      - POSTGRES_DB=source_annotations
     volumes:
+      # Mount schema initialization script
       - ./setup_data/postgres_init:/docker-entrypoint-initdb.d
+      # Data volume is not persisted as this is temporary
     networks:
       - qos_data_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U etl_user -d source_annotations"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Expose port only if you need to connect from host for debugging
+    # ports:
+    #   - "5433:5432"
 
-  source_mongodb:
+  source_mongodb_dev: # Temporary MongoDB for initial ETL
     image: mongo:latest
-    container_name: qos-data-source-mongo
+    container_name: qos-data-source-mongo-dev
+    # env_file:
+    #   - .env.dev
     environment:
-      # - MONGO_INITDB_ROOT_USERNAME=${SOURCE_MONGO_USER}
-      # - MONGO_INITDB_ROOT_PASSWORD=${SOURCE_MONGO_PASSWORD}
-      - MONGO_INITDB_DATABASE=${SOURCE_MONGO_DB}
+      # Load credentials/db name from .env.dev
+      - MONGO_INITDB_DATABASE=source_images
+      # Add auth variables if needed:
+      # - MONGO_INITDB_ROOT_USERNAME=etl_user
+      # - MONGO_INITDB_ROOT_PASSWORD=etl_password
     volumes:
+      # Mount schema/index initialization script
       - ./setup_data/mongo_init:/docker-entrypoint-initdb.d
+      # Data volume is not persisted
     networks:
       - qos_data_dev_network
+    healthcheck:
+      # Adjust test if authentication is enabled
+      test: echo 'db.runCommand("ping").ok' | mongosh mongodb://source_mongodb_dev:27017/source_images --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Expose port only if needed for debugging
+    # ports:
+    #   - "27018:27017"
 
 networks:
   qos_data_dev_network:
     driver: bridge
-  
+
+# No persistent volumes needed for this temporary setup
